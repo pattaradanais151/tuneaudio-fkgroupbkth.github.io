@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VIP Audio Tuner Pro</title>
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#121212">
+    <style>
+        :root {
+            --bg-dark: #0f0f13;
+            --panel-bg: #1c1c24;
+            --accent-neon: #00ffcc;
+            --accent-car: #ff3366;
+            --accent-eq: #ffcc00;
+            --text-main: #ffffff;
+            --text-muted: #8e8e99;
+        }
+
+        * { box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-image: radial-gradient(circle at 50% 0%, #2a2a35 0%, #0f0f13 70%);
+            padding: 20px 0;
+        }
+
+        .player-card {
+            background: var(--panel-bg);
+            width: 95%;
+            max-width: 450px;
+            padding: 25px;
+            border-radius: 24px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8), inset 0 2px 2px rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+
+        .header { text-align: center; margin-bottom: 20px; }
+        .header h1 {
+            margin: 0; font-size: 24px; letter-spacing: 1px; text-transform: uppercase;
+            background: linear-gradient(90deg, var(--accent-neon), var(--accent-car));
+            -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+
+        canvas {
+            width: 100%; height: 70px; background: #121218; border-radius: 12px;
+            margin-bottom: 20px; border: 1px solid rgba(0, 255, 204, 0.2);
+        }
+
+        .upload-btn {
+            display: block; background: #252530; padding: 12px; text-align: center;
+            border-radius: 12px; border: 2px dashed #444; cursor: pointer;
+            transition: all 0.3s; margin-bottom: 20px; font-size: 14px;
+        }
+        .upload-btn:hover { border-color: var(--accent-neon); color: var(--accent-neon); }
+        .upload-btn input { display: none; }
+
+        .mode-selector {
+            display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;
+        }
+
+        .mode-btn {
+            background: #121218; color: var(--text-muted); border: 1px solid #252530;
+            padding: 10px; border-radius: 10px; font-size: 13px; font-weight: bold;
+            cursor: pointer; transition: all 0.3s;
+        }
+        .mode-btn.active[data-mode="normal"] { border-color: #8e8e99; color: #fff; background: #252530; }
+        .mode-btn.active[data-mode="tiktok"] { border-color: #00f2fe; color: #00f2fe; }
+        .mode-btn.active[data-mode="car"] { border-color: var(--accent-car); color: var(--accent-car); }
+        .mode-btn.active[data-mode="manual"] { border-color: var(--accent-eq); color: var(--accent-eq); }
+
+        /* โซน Manual EQ */
+        .eq-panel {
+            background: #121218; padding: 15px; border-radius: 12px; margin-bottom: 20px;
+            display: none; /* ซ่อนไว้ก่อน จะแสดงเมื่อเลือกโหมด Manual */
+            border: 1px solid rgba(255, 204, 0, 0.2);
+        }
+        .eq-panel.show { display: block; }
+        
+        .eq-slider-group {
+            display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;
+        }
+        .eq-slider-group label { width: 45px; font-size: 12px; color: var(--text-muted); text-align: right; margin-right: 10px; }
+        .eq-slider-group input[type="range"] {
+            flex-grow: 1; -webkit-appearance: none; height: 6px; background: #333;
+            border-radius: 5px; outline: none;
+        }
+        .eq-slider-group input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; width: 16px; height: 16px; border-radius: 50%;
+            background: var(--accent-eq); cursor: pointer;
+        }
+
+        audio { width: 100%; border-radius: 30px; height: 40px; }
+        audio::-webkit-media-controls-panel { background-color: #252530; }
+        audio::-webkit-media-controls-current-time-display, audio::-webkit-media-controls-time-remaining-display { color: white; }
+    </style>
+</head>
+<body>
+
+    <div class="player-card">
+        <div class="header">
+            <h1>VIP Audio Tuner</h1>
+            <p style="color: var(--text-muted); font-size: 11px; margin-top:5px;">Web Audio API | Local MP3</p>
+        </div>
+
+        <canvas id="visualizer"></canvas>
+
+        <label class="upload-btn">
+            <span id="fileName">เลือกไฟล์เพลง (MP3, WAV)</span>
+            <input type="file" id="audioUpload" accept="audio/*">
+        </label>
+
+        <div class="mode-selector">
+            <button class="mode-btn active" data-mode="normal">เสียงดั้งเดิม (Flat)</button>
+            <button class="mode-btn" data-mode="tiktok">TikTok (Mid-Bass)</button>
+            <button class="mode-btn" data-mode="car">รถยนต์ (Sub-Bass)</button>
+            <button class="mode-btn" data-mode="manual">ปรับ EQ เอง</button>
+        </div>
+
+        <div class="eq-panel" id="eqPanel">
+            <div class="eq-slider-group">
+                <label>60Hz</label>
+                <input type="range" id="eq60" min="-15" max="20" value="0">
+            </div>
+            <div class="eq-slider-group">
+                <label>230Hz</label>
+                <input type="range" id="eq230" min="-15" max="15" value="0">
+            </div>
+            <div class="eq-slider-group">
+                <label>910Hz</label>
+                <input type="range" id="eq910" min="-15" max="15" value="0">
+            </div>
+            <div class="eq-slider-group">
+                <label>3.6kHz</label>
+                <input type="range" id="eq3600" min="-15" max="15" value="0">
+            </div>
+            <div class="eq-slider-group">
+                <label>14kHz</label>
+                <input type="range" id="eq14000" min="-15" max="15" value="0">
+            </div>
+            <div style="text-align: center; font-size: 11px; color: var(--text-muted); margin-top: 10px;">
+                👈 ลดเสียง ----- เพิ่มเสียง 👉
+            </div>
+        </div>
+
+        <audio id="audioPlayer" controls></audio>
+    </div>
+
+    <script>
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('sw.js').catch(err => console.log(err));
+        }
+
+        const audioUpload = document.getElementById('audioUpload');
+        const fileNameDisplay = document.getElementById('fileName');
+        const audioPlayer = document.getElementById('audioPlayer');
+        const modeBtns = document.querySelectorAll('.mode-btn');
+        const eqPanel = document.getElementById('eqPanel');
+        const canvas = document.getElementById('visualizer');
+        const canvasCtx = canvas.getContext('2d');
+
+        // ตัวแปรระบบเสียง
+        let audioCtx, source, analyser, compressor;
+        
+        // Preset Filters
+        let presetBassFilter, presetSubBassFilter;
+        
+        // Manual EQ Filters
+        let eqBands = {}; 
+        const eqFrequencies = [60, 230, 910, 3600, 14000];
+
+        let currentMode = 'normal';
+        let isInitialized = false;
+
+        function initAudio() {
+            if (isInitialized) return;
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            source = audioCtx.createMediaElementSource(audioPlayer);
+            
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 256;
+
+            compressor = audioCtx.createDynamicsCompressor();
+
+            // 1. สร้าง Filters สำหรับโหมด Preset (TikTok / Car)
+            presetBassFilter = audioCtx.createBiquadFilter();
+            presetBassFilter.type = 'lowshelf';
+            presetBassFilter.frequency.value = 120;
+            
+            presetSubBassFilter = audioCtx.createBiquadFilter();
+            presetSubBassFilter.type = 'peaking';
+            presetSubBassFilter.frequency.value = 55;
+            presetSubBassFilter.Q.value = 1.2;
+
+            // 2. สร้าง Filters สำหรับโหมด Manual EQ 5 แบนด์
+            eqFrequencies.forEach(freq => {
+                let filter = audioCtx.createBiquadFilter();
+                filter.type = (freq === 60) ? 'lowshelf' : (freq === 14000) ? 'highshelf' : 'peaking';
+                filter.frequency.value = freq;
+                filter.gain.value = 0; // เริ่มต้นที่ 0 dB
+                eqBands[freq] = filter;
+                
+                // จับคู่ Slider กับ Filter
+                document.getElementById('eq' + freq).addEventListener('input', (e) => {
+                    if (currentMode === 'manual') {
+                        eqBands[freq].gain.value = e.target.value;
+                    }
+                });
+            });
+
+            source.connect(analyser);
+            applyEffect('normal');
+            isInitialized = true;
+            drawVisualizer();
+        }
+
+        // ฟังก์ชันตัดการเชื่อมต่อทั้งหมดเพื่อป้องกันเสียงทับซ้อน
+        function disconnectAll() {
+            analyser.disconnect();
+            presetBassFilter.disconnect();
+            presetSubBassFilter.disconnect();
+            compressor.disconnect();
+            Object.values(eqBands).forEach(band => band.disconnect());
+        }
+
+        function applyEffect(mode) {
+            disconnectAll();
+
+            if (mode === 'normal') {
+                analyser.connect(audioCtx.destination);
+            } 
+            else if (mode === 'tiktok') {
+                presetBassFilter.gain.value = 12; 
+                compressor.threshold.value = -20;
+                compressor.ratio.value = 8;
+                
+                analyser.connect(presetBassFilter);
+                presetBassFilter.connect(compressor);
+                compressor.connect(audioCtx.destination);
+            } 
+            else if (mode === 'car') {
+                presetSubBassFilter.gain.value = 22; 
+                presetBassFilter.gain.value = 5;     
+                compressor.threshold.value = -30;
+                compressor.ratio.value = 20;
+
+                analyser.connect(presetSubBassFilter);
+                presetSubBassFilter.connect(presetBassFilter);
+                presetBassFilter.connect(compressor);
+                compressor.connect(audioCtx.destination);
+            }
+            else if (mode === 'manual') {
+                // อัปเดตค่าจาก slider ปัจจุบัน
+                eqFrequencies.forEach(freq => {
+                    eqBands[freq].gain.value = document.getElementById('eq' + freq).value;
+                });
+
+                // ร้อยสาย EQ เข้าด้วยกัน: analyser -> eq60 -> eq230 -> ... -> compressor -> ลำโพง
+                compressor.threshold.value = -24; // ป้องกันเสียงแตกจากการดึง EQ สูงเกินไป
+                compressor.ratio.value = 4;
+
+                analyser.connect(eqBands[60]);
+                eqBands[60].connect(eqBands[230]);
+                eqBands[230].connect(eqBands[910]);
+                eqBands[910].connect(eqBands[3600]);
+                eqBands[3600].connect(eqBands[14000]);
+                eqBands[14000].connect(compressor);
+                compressor.connect(audioCtx.destination);
+            }
+        }
+
+        // เปลี่ยนโหมด
+        modeBtns.forEach(btn => {
+            btn.addEventListener('click', () => {
+                if (!isInitialized) initAudio();
+                
+                modeBtns.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                
+                currentMode = btn.dataset.mode;
+                
+                // ซ่อน/แสดง แผง EQ
+                if(currentMode === 'manual') {
+                    eqPanel.classList.add('show');
+                } else {
+                    eqPanel.classList.remove('show');
+                }
+
+                applyEffect(currentMode);
+            });
+        });
+
+        audioUpload.addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            if (file) {
+                const fileURL = URL.createObjectURL(file);
+                audioPlayer.src = fileURL;
+                fileNameDisplay.textContent = "🎵 " + file.name.substring(0, 20) + "...";
+                if (!isInitialized) initAudio();
+                audioPlayer.play();
+            }
+        });
+
+        audioPlayer.addEventListener('play', () => {
+            if (audioCtx && audioCtx.state === 'suspended') audioCtx.resume();
+        });
+
+        function drawVisualizer() {
+            requestAnimationFrame(drawVisualizer);
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteFrequencyData(dataArray);
+
+            canvasCtx.fillStyle = '#121218';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            const barWidth = (canvas.width / bufferLength) * 2.5;
+            let barHeight, x = 0;
+
+            for(let i = 0; i < bufferLength; i++) {
+                barHeight = dataArray[i] / 3;
+                
+                if(currentMode === 'normal') canvasCtx.fillStyle = '#8e8e99';
+                else if(currentMode === 'tiktok') canvasCtx.fillStyle = '#00f2fe';
+                else if(currentMode === 'car') canvasCtx.fillStyle = '#ff3366';
+                else if(currentMode === 'manual') canvasCtx.fillStyle = '#ffcc00';
+
+                canvasCtx.fillRect(x, canvas.height - barHeight, barWidth, barHeight);
+                x += barWidth + 1;
+            }
+        }
+    </script>
+</body>
+</html>
