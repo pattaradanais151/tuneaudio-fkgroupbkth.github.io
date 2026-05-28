@@ -54,13 +54,24 @@
             margin-bottom: 20px; border: 1px solid rgba(0, 255, 204, 0.2);
         }
 
+        /* โซนเลือกไฟล์ที่แก้บัคแล้ว */
         .upload-btn {
-            display: block; background: #252530; padding: 12px; text-align: center;
+            display: block; background: #252530; padding: 15px; text-align: center;
             border-radius: 12px; border: 2px dashed #444; cursor: pointer;
             transition: all 0.3s; margin-bottom: 20px; font-size: 14px;
+            position: relative; /* จำเป็นมาก */
+            overflow: hidden; /* จำเป็นมาก */
         }
         .upload-btn:hover { border-color: var(--accent-neon); color: var(--accent-neon); }
-        .upload-btn input { display: none; }
+        
+        .upload-btn input {
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+            width: 100%; height: 100%;
+            opacity: 0; /* ทำให้ปุ่มใส แต่ยังกดได้ 100% */
+            cursor: pointer;
+            display: block; /* ห้ามใช้ none เด็ดขาด */
+        }
 
         .mode-selector {
             display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 20px;
@@ -79,7 +90,7 @@
         /* โซน Manual EQ */
         .eq-panel {
             background: #121218; padding: 15px; border-radius: 12px; margin-bottom: 20px;
-            display: none; /* ซ่อนไว้ก่อน จะแสดงเมื่อเลือกโหมด Manual */
+            display: none; 
             border: 1px solid rgba(255, 204, 0, 0.2);
         }
         .eq-panel.show { display: block; }
@@ -112,16 +123,16 @@
 
         <canvas id="visualizer"></canvas>
 
-        <label class="upload-btn">
-            <span id="fileName">เลือกไฟล์เพลง (MP3, WAV)</span>
-            <input type="file" id="audioUpload" accept=".mp3, .wav, .m4a, audio/*, application/octet-stream">
-        </label>
+        <div class="upload-btn">
+            <span id="fileName">📁 คลิกที่นี่เพื่อเลือกไฟล์เพลง</span>
+            <input type="file" id="audioUpload">
+        </div>
 
         <div class="mode-selector">
-            <button class="mode-btn active" data-mode="normal">เสียงดั้งเดิม (Flat)</button>
-            <button class="mode-btn" data-mode="tiktok">TikTok (Mid-Bass)</button>
-            <button class="mode-btn" data-mode="car">รถยนต์ (Sub-Bass)</button>
-            <button class="mode-btn" data-mode="manual">ปรับ EQ เอง</button>
+            <button class="mode-btn active" data-mode="normal">🎧 เสียงดั้งเดิม (Flat)</button>
+            <button class="mode-btn" data-mode="tiktok">📱 TikTok (Mid-Bass)</button>
+            <button class="mode-btn" data-mode="car">🚗 รถยนต์ (Sub-Bass)</button>
+            <button class="mode-btn" data-mode="manual">🎛️ ปรับ EQ เอง</button>
         </div>
 
         <div class="eq-panel" id="eqPanel">
@@ -166,13 +177,8 @@
         const canvas = document.getElementById('visualizer');
         const canvasCtx = canvas.getContext('2d');
 
-        // ตัวแปรระบบเสียง
         let audioCtx, source, analyser, compressor;
-        
-        // Preset Filters
         let presetBassFilter, presetSubBassFilter;
-        
-        // Manual EQ Filters
         let eqBands = {}; 
         const eqFrequencies = [60, 230, 910, 3600, 14000];
 
@@ -189,7 +195,6 @@
 
             compressor = audioCtx.createDynamicsCompressor();
 
-            // 1. สร้าง Filters สำหรับโหมด Preset (TikTok / Car)
             presetBassFilter = audioCtx.createBiquadFilter();
             presetBassFilter.type = 'lowshelf';
             presetBassFilter.frequency.value = 120;
@@ -199,15 +204,13 @@
             presetSubBassFilter.frequency.value = 55;
             presetSubBassFilter.Q.value = 1.2;
 
-            // 2. สร้าง Filters สำหรับโหมด Manual EQ 5 แบนด์
             eqFrequencies.forEach(freq => {
                 let filter = audioCtx.createBiquadFilter();
                 filter.type = (freq === 60) ? 'lowshelf' : (freq === 14000) ? 'highshelf' : 'peaking';
                 filter.frequency.value = freq;
-                filter.gain.value = 0; // เริ่มต้นที่ 0 dB
+                filter.gain.value = 0; 
                 eqBands[freq] = filter;
                 
-                // จับคู่ Slider กับ Filter
                 document.getElementById('eq' + freq).addEventListener('input', (e) => {
                     if (currentMode === 'manual') {
                         eqBands[freq].gain.value = e.target.value;
@@ -221,7 +224,6 @@
             drawVisualizer();
         }
 
-        // ฟังก์ชันตัดการเชื่อมต่อทั้งหมดเพื่อป้องกันเสียงทับซ้อน
         function disconnectAll() {
             analyser.disconnect();
             presetBassFilter.disconnect();
@@ -257,13 +259,11 @@
                 compressor.connect(audioCtx.destination);
             }
             else if (mode === 'manual') {
-                // อัปเดตค่าจาก slider ปัจจุบัน
                 eqFrequencies.forEach(freq => {
                     eqBands[freq].gain.value = document.getElementById('eq' + freq).value;
                 });
 
-                // ร้อยสาย EQ เข้าด้วยกัน: analyser -> eq60 -> eq230 -> ... -> compressor -> ลำโพง
-                compressor.threshold.value = -24; // ป้องกันเสียงแตกจากการดึง EQ สูงเกินไป
+                compressor.threshold.value = -24; 
                 compressor.ratio.value = 4;
 
                 analyser.connect(eqBands[60]);
@@ -276,7 +276,6 @@
             }
         }
 
-        // เปลี่ยนโหมด
         modeBtns.forEach(btn => {
             btn.addEventListener('click', () => {
                 if (!isInitialized) initAudio();
@@ -286,7 +285,6 @@
                 
                 currentMode = btn.dataset.mode;
                 
-                // ซ่อน/แสดง แผง EQ
                 if(currentMode === 'manual') {
                     eqPanel.classList.add('show');
                 } else {
